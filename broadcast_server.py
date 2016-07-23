@@ -28,19 +28,19 @@ def main():
     args = parse_args()
     config = load_config(args.config)
 
-    pub_port = config['broadcast']['pub_port']
-    rep_port = config['broadcast']['rep_port']
+    pubsub_port = config['broadcast']['pubsub_port']
+    pullpush_port = config['broadcast']['pullpush_port']
 
     context = zmq.Context()
     pub_socket = context.socket(zmq.PUB)
-    pub_socket.bind('tcp://*:{}'.format(pub_port))
+    pub_socket.bind('tcp://*:{}'.format(pubsub_port))
 
-    rep_socket = context.socket(zmq.REP)
-    rep_socket.bind('tcp://*:{}'.format(rep_port))
+    pull_socket = context.socket(zmq.PULL)
+    pull_socket.bind('tcp://*:{}'.format(pullpush_port))
 
     log.info('Listening...')
     while True:
-        string = rep_socket.recv()
+        string = pull_socket.recv()
         log.info(string)
         pub_socket.send(string)
 
