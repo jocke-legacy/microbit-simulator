@@ -83,8 +83,7 @@ class MicroBitDisplay:
         #     char=char)
         # text = str(value)
 
-        self._screen.addstr(x, y, BRIGHTNESS[value],
-                            curses.COLOR_BLUE)
+        self._screen.addch(y, x, BRIGHTNESS[value])
 
     def _deinit(self):
         curses.endwin()
