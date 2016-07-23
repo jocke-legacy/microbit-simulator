@@ -1,16 +1,79 @@
+import sys
 from typing import Iterable
 
 import numpy as np
 
 import curses
 
+BRIGHTNESS_UNICODE_BLOCK = [
+    ' ',  # 0
+    '▁',
+    '▂',
+    '▃',
+    '▄',  # 4
+    '▅',
+    '▆',
+    '▉',
+    '█',
+    '▇',  # 9
+]
 
-class MicroBitDisplay:
+BRIGHTNESS_8BIT = np.linspace(0, 255, num=10, dtype=int)
+
+BRIGHTNESS = BRIGHTNESS_UNICODE_BLOCK
+
+
+class ANSIRenderer:
+    def _render(self):
+        sys.stdout.write('\033[2J\033[1;1H')
+        char = '\u25A0'  # ■ BLACK SQUARE
+
+        for y, line in enumerate(self._buffer):
+            for x, value in enumerate(line):
+                text = '\x1b[38;2;{red};0;0m{char}\x1b[0m'.format(
+                    red=BRIGHTNESS_8BIT[value],
+                    char=char)
+
+                sys.stdout.write(text)
+
+            sys.stdout.write('\n')
+
+        sys.stdout.flush()
+
+
+class CursesRenderer:
+    def __init__(self):
+        self._screen = curses.initscr()
+
+        curses.start_color()
+        curses.use_default_colors()
+
+    def _render(self):
+        try:
+            self._screen.clear()
+            for (x, y), value in np.ndenumerate(self._buffer):
+                self._render_pixel(x, y, value)
+
+            self._screen.refresh()
+        except Exception:
+            self._deinit()
+            raise
+
+    def _render_pixel(self, x, y, value):
+
+        # text = str(value)
+
+        self._screen.addch(y, x, BRIGHTNESS[value])
+
+    def _deinit(self):
+        curses.endwin()
+
+
+class MicroBitDisplay(ANSIRenderer):
     def __init__(self, curses_screen=None):
         self._buffer = np.zeros((5, 5), dtype=np.int8)
-        self._screen = None
+        super().__init__()
         self._on = True
-        curses.wrapper(self._init_screen)
 
     def on(self):
         self._on = True
@@ -27,10 +90,11 @@ class MicroBitDisplay:
     def set_pixel(self, x, y, value):
         assert 0 <= value < 10
         self._buffer[x, y] = value
-        self._update()
+        self._render()
 
     def clear(self):
         self._buffer = np.empty((5, 5), dtype=np.int8)
+        self._render()
 
     def scroll(self, string, delay=150, wait=True, loop=False,
                monospace=False):
@@ -50,61 +114,8 @@ class MicroBitDisplay:
         elif isinstance(first_arg, Image):
             show_image(first_arg)
 
-    def _init_screen(self, curses_screen=None):
-        if curses_screen is None:
-            curses_screen = curses.initscr()
-
-        self._screen = curses_screen
-
-        curses.start_color()
-        curses.use_default_colors()
-
-        # print(curses.can_change_color())
-        #
-        # if curses.can_change_color():
-        #     for i, red in enumerate(BRIGHTNESS):
-        #         curses.init_color(126 + i, red, 0, 0)
-
-    def _update(self):
-        try:
-            self._screen.clear()
-            for (x, y), value in np.ndenumerate(self._buffer):
-                self._render_pixel(x, y, value)
-
-            self._screen.refresh()
-        except Exception:
-            self._deinit()
-            raise
-
-    def _render_pixel(self, x, y, value):
-        char = '\u25A0'  # ■ BLACK SQUARE
-        # text = '\x1b[38;2;{red};0;0m{char}\x1b[0m'.format(
-        #     red=RED_MAP[value],
-        #     char=char)
-        # text = str(value)
-
-        self._screen.addch(y, x, BRIGHTNESS[value])
-
-    def _deinit(self):
-        curses.endwin()
-
     def __del__(self):
-        self._deinit()
-
-BRIGHTNESS_UNICODE_BLOCK = [
-    ' ',  # 0
-    '▁',
-    '▂',
-    '▃',
-    '▄',  # 4
-    '▅',
-    '▆',
-    '▉',
-    '█',
-    '▇',  # 9
-]
-
-BRIGHTNESS = BRIGHTNESS_UNICODE_BLOCK
+        if hasattr(self, '_deinit'):
+            self._deinit()
 
 
-BRIGHTNESS_8BIT = np.linspace(0, 255, num=10, dtype=int)
