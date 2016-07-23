@@ -1,4 +1,5 @@
 import sys
+import io
 from typing import Iterable
 
 import numpy as np
@@ -24,20 +25,74 @@ BRIGHTNESS = BRIGHTNESS_UNICODE_BLOCK
 
 
 class ANSIRenderer:
+    SPACE = ' '  # For clarity
+    TOP_LEFT = '\u256d'
+    TOP_RIGHT = '\u256e'
+    BOTTOM_RIGHT = '\u256f'
+    BOTTOM_LEFT = '\u2570'
+    LEFT = RIGHT= '\u2502'
+    BOTTOM = TOP = '\u2500'
+    LED = '\u25A0'  # ■ BLACK SQUARE
+
     def _render(self):
         sys.stdout.write('\033[2J\033[1;1H')
-        char = '\u25A0'  # ■ BLACK SQUARE
+
+        border = 1
+        led = 9
+        margin_x = 7
+        margin_y = 1
+
+        def pad_x(text, corr_l=0, corr_r=0):
+            pad_l = self.SPACE * (margin_x + corr_l)
+            pad_r = self.SPACE * (margin_x + corr_r)
+
+            return '{left}{pad_l}{text}{pad_r}{right}\n'.format(
+                pad_l=pad_l,
+                text=text,
+                pad_r=pad_r,
+                left=self.LEFT,
+                right=self.RIGHT
+            )
+
+        def format_brightness(value):
+            return '\x1b[38;2;{red};0;0m{char}\x1b[0m'.format(
+                red=BRIGHTNESS_8BIT[value],
+                char=self.LED)
+
+        def center(text, length=None):
+            if length is None:
+                return text
+
+            x_pad, remainder = divmod(length - len(text), 2)
+            return (self.SPACE * (x_pad + remainder) +
+                    text +
+                    self.SPACE * x_pad)
+
+        def left(text, length=None):
+            if length is None:
+                return text
+
+        buf = io.StringIO()
+
+        buf.write(self.TOP_LEFT + self.TOP * (margin_x * 2 + led) +
+                  self.TOP_RIGHT + '\n')
+        y_pad = [pad_x(self.SPACE * led) for _ in range(0, margin_y)]
+
+        buf.write(pad_x(center('microbit', led)))
+        buf.write(''.join(y_pad[:-1]))
 
         for y, line in enumerate(self._buffer):
-            for x, value in enumerate(line):
-                text = '\x1b[38;2;{red};0;0m{char}\x1b[0m'.format(
-                    red=BRIGHTNESS_8BIT[value],
-                    char=char)
+            buf.write(pad_x(''.join(' {}'.format(format_brightness(value))
+                                    for value in line),
+                            corr_l=-1))
 
-                sys.stdout.write(text)
+        buf.write(''.join(y_pad))
 
-            sys.stdout.write('\n')
+        buf.write(self.BOTTOM_LEFT + self.BOTTOM * (margin_x * 2 + led) +
+                  self.BOTTOM_RIGHT + '\n')
+        buf.flush()
 
+        sys.stdout.write(buf.getvalue())
         sys.stdout.flush()
 
 
