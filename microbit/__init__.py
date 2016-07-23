@@ -1,7 +1,21 @@
-from collections import namedtuple
-import curses
+from ._microbitdisplay import MicroBitDisplay
+import time
 
-from . import display
+_TIME_INIT = time.time()
+
+
+def running_time() -> int:
+    """
+    Returns milliseconds since start.
+    """
+    now = time.time()
+    _running_time = round((now - _TIME_INIT) * 1000)
+    return _running_time
+
+
+def sleep(millis: int):
+    """Sleep for ``millis``"""
+    time.sleep(millis / 1000)
 
 
 class Image:
@@ -54,9 +68,4 @@ class Image:
         pass
 
 
-def main(stdscr):
-    curses.start_color()
-    stdscr.clear()
-
-
-curses.wrapper(main)
+display = MicroBitDisplay()
