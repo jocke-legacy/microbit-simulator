@@ -1,4 +1,9 @@
+import math
+import microbit
 
+
+def hypot(x, y):
+    return math.sqrt(math.pow(x, 2) + math.pow(y, 2))
 
 
 def animate_sin(operation):
@@ -11,7 +16,7 @@ def animate_sin(operation):
     max_distance = hypot(origo_x, origo_y)
     double_max_distance = max_distance * 2
     offset = 0
-    last_t = now()
+    last_t = microbit.running_time()
 
     while True:
         for x in range(0, 5):
@@ -27,10 +32,13 @@ def animate_sin(operation):
 
                 value = round(sin * half_brightness_max + half_brightness_max)
 
-                display.set_pixel(x, y, value)
+                microbit.display.set_pixel(x, y, value)
 
-        t_now = now()
+        t_now = microbit.running_time()
         delta_t = t_now - last_t
         offset += delta_t * 0.001
         last_t = t_now
-        yield from sleep(10)
+        microbit.sleep(10)
+
+
+animate_sin(-1)
