@@ -22,11 +22,11 @@ class MicroBitDisplay:
         return self._on
 
     def get_pixel(self, x, y):
-        return self._buffer[y, x]
+        return self._buffer[x, y]
 
     def set_pixel(self, x, y, value):
         assert 0 <= value < 10
-        self._buffer[y, x] = value
+        self._buffer[x, y] = value
         self._update()
 
     def clear(self):
