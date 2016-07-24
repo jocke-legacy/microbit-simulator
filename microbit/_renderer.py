@@ -46,6 +46,11 @@ class AbstractRenderer(metaclass=ABCMeta):
 
 
 class ANSIRenderer(AbstractRenderer):
+    """
+    Renders the microbit display using raw ANSI escape codes.
+
+    See https://en.wikipedia.org/wiki/ANSI_escape_code#CSI_codes
+    """
     SPACE = ' '  # For clarity
     TOP_LEFT = '\u256d'
     TOP_RIGHT = '\u256e'
