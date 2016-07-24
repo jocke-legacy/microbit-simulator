@@ -2,6 +2,6 @@
     "broadcast": {
         "host": "localhost",
         "pubsub_port": 5556,
-        "repreq_port": 5557
+        "pullpush_port": 5557
     }
 }
