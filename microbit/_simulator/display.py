@@ -1,3 +1,4 @@
+import logging
 import functools
 from typing import Iterable
 
@@ -5,17 +6,19 @@ import numpy as np
 
 from microbit._simulator.image import Image
 from microbit._simulator.base import ImageData
-from microbit._simulator.renderer import CursesRenderer
+
+_log = logging.getLogger(__name__)
 
 
 def updates(func):
     """
     Helper to render the display after the function has been
-    executed
+    executed.
     """
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
         result = func(self, *args, **kwargs)
+        #_log.error('updates: func=%r', func)
         if callable(self._update_callback):
             self._update_callback()
         return result
@@ -23,9 +26,9 @@ def updates(func):
     return wrapper
 
 
-class MicroBitDisplay(ImageData):
-    def __init__(self, update_callback=None):
-        self._update_callback = None
+class Display(ImageData):
+    def __init__(self, update_callback):
+        self._update_callback = update_callback
 
         super().__init__(width=5, height=5)
         self._on = True
@@ -43,7 +46,7 @@ class MicroBitDisplay(ImageData):
 
     @updates
     def set_pixel(self, x, y, value):
-        return super(MicroBitDisplay, self).set_pixel(x, y, value)
+        return super(Display, self).set_pixel(x, y, value)
 
     @updates
     def clear(self):

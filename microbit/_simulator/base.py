@@ -36,7 +36,7 @@ class ImageData(abstract.ImageData):
         """
         Get the string representation of the image as one string
         """
-        return sum(self._repr_rows(), '')
+        return ''.join(self._repr_rows())
 
     def _set_from_string(self, string: str):
         if not string:

@@ -21,6 +21,7 @@ def draw_gradient1():
         delta_t = t_now - last_t
         offset += delta_t * 0.01
         last_t = t_now
+
         microbit.sleep(1)
 
 

@@ -1,4 +1,5 @@
 import importlib
+import logging
 import os
 from typing import Any
 
@@ -23,5 +24,23 @@ def get_instance(path, *args, **kwargs):
     return type_(*args, **kwargs)
 
 
-RENDERER = get_instance(
-    os.environ.get('RENDERER', 'microbit._simulator.renderer:ANSIRenderer'))
+def env_int(key: str, default: int) -> int:
+    value_str = os.environ.get(key)
+
+    if value_str is not None:
+        return int(value_str)
+
+    return default
+
+
+RENDERER = os.environ.get(
+    'RENDERER',
+    'microbit._simulator.renderer:CursesRenderer')
+
+# Output/Input
+ZMQ_STDERR_SOCKET = 'inproc://stderr'
+ZMQ_STDOUT_SOCKET = 'inproc://stdout'
+
+# Logging
+LOGGING_LEVEL = env_int('LOG_LEVEL', logging.INFO)
+LOGGING_PUB_SOCKET = 'ipc:///tmp/microbit-logging.sock'

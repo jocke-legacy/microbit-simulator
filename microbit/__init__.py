@@ -21,10 +21,11 @@ def sleep(millis: int):
 
 
 simulator = Simulator()
-running_time = simulator.running_time()
+running_time = simulator.running_time
 
 button_a = simulator.button_a
 button_b = simulator.button_b
 
-
 display = simulator.display
+
+simulator.start()

@@ -1,48 +1,17 @@
-import logging
-import select
-import curses
 import io
+import logging
 import re
+import select
 import sys
+import termios
 import time
 import tty
-from abc import ABCMeta, abstractmethod
-
-import atexit
 from contextlib import contextmanager
 
-import numpy as np
-import termios
+from microbit._simulator.renderer.abstract import AbstractRenderer
+from microbit._simulator.renderer.common import format_brightness
 
 _log = logging.getLogger(__name__)
-
-U_BLACK_SQUARE = '\u25A0'  # ■ BLACK SQUARE
-U_FULL_BLOCK = '\u2588'  # █ FULL BLOCK
-U_LOWER_HALF_BLOCK = '\u2584'  # ▄ LOWER HALF BLOCK
-BRIGHTNESS_UNICODE_BLOCK = [
-    ' ',  # 0
-    '▁',  # 1
-    '▁',  # 2  (duplicate of 1)
-    '▂',  # 3
-    '▃',  # 4
-    '▄',  # 5
-    '▅',  # 6
-    '▆',  # 7
-    '▉',  # 8
-    '█',  # 9
-]
-BRIGHTNESS_8BIT = np.linspace(0, 255, num=10, dtype=int)
-BRIGHTNESS = BRIGHTNESS_UNICODE_BLOCK
-
-
-def ansi_brightness(value):
-    return '\x1b[38;2;{red};0;0m'.format(red=BRIGHTNESS_8BIT[value])
-
-
-def format_brightness(value, char=U_LOWER_HALF_BLOCK):
-    return '{}{char}\x1b[0m'.format(
-        ansi_brightness(value),
-        char=char)
 
 
 def get_position():
@@ -89,15 +58,6 @@ def save_and_restore_cursor(buf):
     buf.write('\x1b[u')
 
 
-BRIGHTNESS_8BIT_ANSI = [format_brightness(value) for value in range(0, 10)]
-
-
-class AbstractRenderer(metaclass=ABCMeta):
-    @abstractmethod
-    def render_leds(self, buffer: np.ndarray) -> None:
-        pass
-
-
 class ANSIRenderer(AbstractRenderer):
     """
     Renders the microbit display using raw ANSI escape codes.
@@ -121,7 +81,7 @@ class ANSIRenderer(AbstractRenderer):
     LED_Y = 5
     BORDER_WIDTH = 1
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         self.term_buf = sys.stderr
         self._last_render = time.time()
 
@@ -175,8 +135,6 @@ class ANSIRenderer(AbstractRenderer):
         buf.write(''.join(y_pad[:-1]))
 
         # Empty area for LED indicators
-        buf.write('\x1b[s')
-
         for i in range(0, self.LED_Y):
             buf.write(self.pad_x(self.SPACE * self.LED_X))
 
@@ -187,8 +145,9 @@ class ANSIRenderer(AbstractRenderer):
                   self.BOTTOM_RIGHT + '\n')
         buf.flush()
 
-        # self.term_buf.write('\x1b[2J'
-        #                     '\x1b[1;1H')
+        # Clear screen
+        self.term_buf.write('\x1b[2J'
+                            '\x1b[1;1H')
         self.term_buf.write(buf.getvalue())
         self.term_buf.flush()
 
@@ -205,18 +164,17 @@ class ANSIRenderer(AbstractRenderer):
         ansi_x = x + 1
         ansi_y = y + 1
 
-        # with save_and_restore_cursor(buf):
-        buf.write('\x1b[u')
-
-        jump_abs = '\x1b[{y};{x}H'.format(x=ansi_x, y=ansi_y)
-        jump_rel = '\x1b[{y}A\x1b[{x}C'.format(
-            y=y,
-            x=x * 2
-        )
-        buf.write('{jump}{string}'.format(
-            jump=jump_abs,
-            string=string,
-        ))
+        with save_and_restore_cursor(buf):
+            jump_abs = '\x1b[{y};{x}H'.format(x=ansi_x, y=ansi_y)
+            # Not reliable
+            # jump_rel = '\x1b[{y}A\x1b[{x}C'.format(
+            #     y=y,
+            #     x=x * 2
+            # )
+            buf.write('{jump}{string}'.format(
+                jump=jump_abs,
+                string=string,
+            ))
 
     @contextmanager
     def buffer_term(self):
@@ -233,7 +191,7 @@ class ANSIRenderer(AbstractRenderer):
         real_term.flush()
         self.term_buf = real_term
 
-    def render_leds(self, buffer):
+    def render_display(self, buffer):
         time.sleep(0.1)
         # Rate limiting
         t_now = time.time()
@@ -254,58 +212,4 @@ class ANSIRenderer(AbstractRenderer):
 
         self.term_buf.flush()
 
-
-class CursesRenderer(AbstractRenderer):
-    def __init__(self):
-        self.screen = curses.initscr()
-        curses.start_color()
-        curses.init_pair(1, curses.COLOR_BLUE, curses.COLOR_BLACK)
-        curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
-
-        curses.curs_set(0)
-
-        self.microbit = curses.newwin(10, 20)
-        self.win = curses.newwin(7, 13, 5, 5)
-
-    def render_leds(self, buffer):
-        from microbit import button_a, button_b
-        self.win.nodelay(True)
-        ch = self.win.getch()
-
-        if ch == curses.KEY_LEFT:
-            button_a._press()
-        elif ch == curses.KEY_RIGHT:
-            button_b._press()
-
-        def led_x(x):
-            return x * 2 + 2
-
-        def led_y(y):
-            return y + 1
-
-        try:
-            self.win.border()
-            self.win.attron(curses.color_pair(1))
-            self.win.attron(curses.A_BOLD)
-            for (x, y), value in np.ndenumerate(buffer):
-                # sys.stderr.write(ansi_brightness(value))
-                # sys.stderr.flush()
-                #self.win.addch(y, x * 2, U_LOWER_HALF_BLOCK)
-                self.win.addch(led_y(y), led_x(x),
-                               BRIGHTNESS_UNICODE_BLOCK[value])
-
-            self.win.attroff(curses.color_pair(1))
-            self.win.attroff(curses.A_BOLD)
-
-            self.win.refresh()
-            self.screen.refresh()
-        except Exception:
-            self._deinit()
-            raise
-
-    def _deinit(self):
-        curses.endwin()
-
-    def __del__(self):
-        self._deinit()
 

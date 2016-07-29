@@ -1,2 +1,3 @@
 pyzmq
 numpy
+colorlog==2.7.0
