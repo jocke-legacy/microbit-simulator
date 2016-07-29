@@ -10,7 +10,6 @@ import zmq
 from microbit._simulator import conf
 from microbit._simulator.button import Button
 from microbit._simulator.display import Display
-from microbit._simulator.io import ZMQWritableStream
 from microbit._simulator.logging import configure_logging
 
 _log = logging.getLogger(__name__)
@@ -46,15 +45,6 @@ class Simulator:
         now = time.time()
         _running_time = round((now - self.time_start) * 1000)
         return _running_time
-
-
-class SimulatorHandler(logging.Handler):
-    def __init__(self, maxlen=40, *args, **kwargs):
-        self.records = deque([], maxlen=maxlen)
-        super(SimulatorHandler, self).__init__(*args, **kwargs)
-
-    def emit(self, record):
-        self.records.append(record)
 
 
 class LoggingData:
