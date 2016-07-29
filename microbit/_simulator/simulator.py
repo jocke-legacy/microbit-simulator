@@ -16,57 +16,24 @@ from microbit._simulator.logging import configure_logging
 _log = logging.getLogger(__name__)
 
 
-class patch_standard_io:
-    def __init__(self, context: zmq.Context):
-        self.real_stderr = sys.stderr
-        self.real_stdout = sys.stdout
-        self.stderr = ZMQWritableStream(conf.ZMQ_STDERR_SOCKET, context)
-        self.stdout = ZMQWritableStream(conf.ZMQ_STDOUT_SOCKET, context)
-
-    def start(self):
-        sys.stdout = self.stdout
-        #sys.stderr = self.stderr
-
-    def stop(self):
-        sys.stdout = self.real_stdout
-        sys.stderr = self.real_stderr
-
-    def __enter__(self):
-        self.start()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.stop()
-
-    def __del__(self):
-        pass
-
-
 class Simulator:
     def __init__(self):
-        print('Hello')
         self.renderer = None
+
         self.display = Display(update_callback=self._on_display_update)
+
         self.button_a = Button('button_a')
         self.button_b = Button('button_b')
         self.time_start = time.time()
 
         self.zmq_context = zmq.Context()
-        self.io_patch = patch_standard_io(self.zmq_context)
-        _log.info('Simulator created')
 
     def start(self):
         _log.info('Starting %r', self)
-        logging_data = LoggingData(self.zmq_context)
-        logging_data.gather()
-        self.renderer = conf.get_instance(conf.RENDERER,
-                                          logging_data)
+        # logging_data = LoggingData(self.zmq_context)
+        # logging_data.gather()
+        self.renderer = conf.get_instance(conf.RENDERER)
         configure_logging()
-        _log.info('Hello!')
-        self.io_patch.start()
-
-    def stop(self):
-        self.io_patch.stop()
 
     def _on_display_update(self):
         _log.debug('Update')
@@ -79,6 +46,15 @@ class Simulator:
         now = time.time()
         _running_time = round((now - self.time_start) * 1000)
         return _running_time
+
+
+class SimulatorHandler(logging.Handler):
+    def __init__(self, maxlen=40, *args, **kwargs):
+        self.records = deque([], maxlen=maxlen)
+        super(SimulatorHandler, self).__init__(*args, **kwargs)
+
+    def emit(self, record):
+        self.records.append(record)
 
 
 class LoggingData:

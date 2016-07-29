@@ -14,24 +14,23 @@ _log = logging.getLogger(__name__)
 class CursesRenderer(AbstractRenderer):
     COLORS_BRIGHTNESS_RANGE = (17, 17 + len(BRIGHTNESS_8BIT))
 
-    def __init__(self, logging_data):
+    def __init__(self):
         self.screen = curses.initscr()
         curses.start_color()
         curses.use_default_colors()
-        #curses.init_pair(1, curses.COLOR_BLUE, curses.COLOR_BLACK)
-        #curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
         self.init_colors()
 
+        # Hide cursor
         curses.curs_set(0)
-
-        self.logging_data = logging_data
 
         self.microbit = curses.newwin(10, 20)
         self.win = curses.newwin(7, 13, 0, 0)
-        self.log_win = curses.newwin(40, 40, 0, 13)
 
-        self.t_logging = threading.Thread(target=self.run_logging_renderer)
-        self.t_logging.start()
+        # self.logging_data = logging_data
+        # self.log_win = curses.newwin(40, 40, 0, 13)
+
+        # self.t_logging = threading.Thread(target=self.run_logging_renderer)
+        # self.t_logging.start()
 
     def init_colors(self):
         _log.debug('Init colors')
@@ -47,19 +46,19 @@ class CursesRenderer(AbstractRenderer):
     def pair_for_value(self, value):
         return curses.color_pair(self.COLORS_BRIGHTNESS_RANGE[0] + value)
 
-    def run_logging_renderer(self):
-        while True:
-            self.render_logging_tick()
-            time.sleep(0.001)
-
-    def render_logging_tick(self):
-        for message in self.logging_data.messages:
-            try:
-                self.log_win.addstr(str(message) + '\n')
-            except:
-                pass
-
-        self.log_win.refresh()
+    # def run_logging_renderer(self):
+    #     while True:
+    #         self.render_logging_tick()
+    #         time.sleep(0.001)
+    #
+    # def render_logging_tick(self):
+    #     for message in self.logging_data.messages:
+    #         try:
+    #             self.log_win.addstr(str(message) + '\n')
+    #         except:
+    #             pass
+    #
+    #     self.log_win.refresh()
 
     def render_display(self, display):
         buffer = display._buffer
