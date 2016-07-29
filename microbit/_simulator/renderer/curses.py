@@ -113,7 +113,7 @@ class CursesRenderer(AbstractRenderer):
         try:
             self.w_leds.border()
             #self.win.attron(curses.A_BOLD)
-            for (x, y), value in np.ndenumerate(buffer):
+            for (y, x), value in np.ndenumerate(buffer):
                 # sys.stderr.write(ansi_brightness(value))
                 # sys.stderr.flush()
                 #self.win.addch(y, x * 2, U_LOWER_HALF_BLOCK)
