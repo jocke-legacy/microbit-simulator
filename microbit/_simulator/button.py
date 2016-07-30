@@ -23,7 +23,9 @@ class Button:
         """
         Check if the button has been pressed since get_presses() was last run.
         """
-        return self._presses > 0
+        was_pressed = self._presses > 0
+        self._presses = 0
+        return was_pressed
 
     def is_pressed(self) -> bool:
         """

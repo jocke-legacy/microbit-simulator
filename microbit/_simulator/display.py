@@ -20,7 +20,7 @@ def updates(func):
         result = func(self, *args, **kwargs)
         #_log.error('updates: func=%r', func)
         if callable(self._update_callback):
-            self._update_callback()
+            self._update_callback(self._buffer.copy())
         return result
 
     return wrapper
