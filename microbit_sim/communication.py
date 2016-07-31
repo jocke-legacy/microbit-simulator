@@ -1,14 +1,12 @@
-import io
-import json
 import logging
 import functools
 from abc import ABCMeta, abstractproperty, abstractmethod
 
+import umsgpack
 import numpy
-import zmq
-import zmq.asyncio
+from microbit_sim import inputevent
 
-from . import conf
+from . import conf, zmq_ext
 
 _log = logging.getLogger(__name__)
 
@@ -20,18 +18,19 @@ class AbstractBus(metaclass=ABCMeta):
 
 
 class BaseSocketDeclaration:
-    def __init__(self, socket: zmq.Socket, addr: str, established=False):
+    def __init__(self, socket: zmq_ext.base.Socket, addr: str,
+                 established=False):
         self.established = established
         self.addr = addr
         self.socket = socket
 
     @abstractmethod
-    def ensure_established(self) -> zmq.Socket:
+    def ensure_established(self) -> zmq_ext.base.Socket:
         pass
 
 
 class Connect(BaseSocketDeclaration):
-    def ensure_established(self) -> zmq.Socket:
+    def ensure_established(self) -> zmq_ext.base.Socket:
         if not self.established:
             self.socket.connect(self.addr)
             self.established = True
@@ -40,7 +39,7 @@ class Connect(BaseSocketDeclaration):
 
 
 class Bind(BaseSocketDeclaration):
-    def ensure_established(self) -> zmq.Socket:
+    def ensure_established(self) -> zmq_ext.base.Socket:
         if not self.established:
             self.socket.bind(self.addr)
             self.established = True
@@ -73,35 +72,47 @@ class BaseBus(AbstractBus):
 
         self._context = None
 
-        control_socket = self.context.socket(zmq.PAIR)
+        control_socket = self.context.socket(zmq_ext.PAIR)
+        microbit_input_socket = self.context.socket(zmq_ext.PAIR)
 
         self.sockets = {
             'display': {
-                'recv': Connect(self.context.socket(zmq.PULL),
+                'recv': Connect(self.context.socket(zmq_ext.PULL),
                                 conf.DISPLAY_SOCKET),
-                'send': Bind(self.context.socket(zmq.PUSH),
+                'send': Bind(self.context.socket(zmq_ext.PUSH),
                              conf.DISPLAY_SOCKET),
             },
             'control': {
                 'recv': Bind(control_socket, conf.CONTROL_SOCKET),
                 'send': Connect(control_socket, conf.CONTROL_SOCKET),
+            },
+            'input-events': {
+                'recv': Bind(self.context.socket(zmq_ext.PAIR),
+                             conf.INPUT_EVENTS_SOCKET),
+                'send': Connect(self.context.socket(zmq_ext.PAIR),
+                                conf.INPUT_EVENTS_SOCKET)
             }
         }
 
         self._bound = set()
         self._connected = set()
 
-    def get_socket(self, socket_name, socket_type) -> zmq.Socket:
+    def get_socket(self, socket_name, socket_type) -> zmq_ext.base.Socket:
         return self.sockets[socket_name][socket_type].ensure_established()
 
-    def send_socket(self, socket_name) -> zmq.Socket:
+    def _send_socket(self, socket_name) -> zmq_ext.base.Socket:
         return self.get_socket(socket_name, socket_type='send')
 
-    def recv_socket(self, socket_name) -> zmq.Socket:
+    def _recv_socket(self, socket_name) -> zmq_ext.base.Socket:
         return self.get_socket(socket_name, socket_type='recv')
 
     def get_socket_addr(self, socket_name):
         return self.sockets[socket_name]['addr']
+
+    @incr_stats_sent
+    def send_input_event(self, event):
+        return self._send_socket('input-events').send_msgpack(
+            inputevent.pack(event))
 
     def __repr__(self):
         return '<{self.__class__.__name__} {self.stats!r}>'.format(self=self)
@@ -111,36 +122,44 @@ class BaseBus(AbstractBus):
 
 
 class Bus(BaseBus):
+    """
+
+    """
     @property
     def context(self):
         if self._context is None:
-            self._context = zmq.Context()
+            self._context = zmq_ext.sync.Context()
 
         return self._context
 
     @incr_stats_sent
-    def send_display(self, buffer):
-        return send_array(self.send_socket('display'), buffer)
+    def send_display(self, buffer, **kwargs):
+        return self._send_socket('display').send_array(buffer)
 
     @incr_stats_sent
-    def send_control(self, control):
-        return self.send_socket('display').send_string(control)
+    def send_control(self, control, **kwargs):
+        return self._send_socket('control').send_msgpack(control)
+
+    @incr_stats_rcvd
+    def recv_input_event(self):
+        return inputevent.unpack(
+            self._recv_socket('input-events').recv_msgpack())
 
 
 class AsyncBus(BaseBus):
     @property
     def context(self):
         if self._context is None:
-            self._context = zmq.asyncio.Context()
+            self._context = zmq_ext.asyncio.Context()
         return self._context
 
     @incr_stats_rcvd
     async def recv_display(self):
-        return await recv_array(self.recv_socket('display'))
+        return self._recv_socket('display').recv_array()
 
     @incr_stats_rcvd
-    async def recv_control(self):
-        return (await self.recv_socket('control').recv()).decode('utf-8')
+    def recv_control(self):
+        return self._recv_socket('control').recv_msgpack()
 
 
 def send_array(socket, A, flags=0, copy=True, track=False):
@@ -149,21 +168,20 @@ def send_array(socket, A, flags=0, copy=True, track=False):
         dtype=str(A.dtype),
         shape=A.shape,
     )
-    socket.send_json(md, flags | zmq.SNDMORE)
-    return socket.send(A, flags, copy=copy, track=track)
+    return socket.send_multipart([umsgpack.packb(md), A],
+                                 flags=flags,
+                                 copy=copy,
+                                 track=track)
 
 
 async def recv_array(socket, flags=0, copy=True, track=False):
     """recv a numpy array"""
-    md = await recv_json(socket, flags=flags)
-    msg = await socket.recv(flags=flags, copy=copy, track=track)
+    multipart = await socket.recv_multipart(flags=flags, copy=copy,
+                                            track=track)
+    metadata_bytes, msg = multipart
+    metadata = umsgpack.unpackb(metadata_bytes)
     buf = memoryview(msg)
-    A = numpy.frombuffer(buf, dtype=md['dtype'])
-    return A.reshape(md['shape'])
-
-
-async def recv_json(socket, flags=0, **kwargs):
-    return json.loads((await socket.recv(flags=flags)).decode('utf-8'),
-                      **kwargs)
+    numpy_array = numpy.frombuffer(buf, dtype=metadata['dtype'])
+    return numpy_array.reshape(metadata['shape'])
 
 

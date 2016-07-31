@@ -278,6 +278,7 @@ class CursesRenderer(AbstractRenderer):
             button_b._press()
 
     def render_display(self, buffer):
+        _log.debug('render_display(buffer=%r)', buffer)
         self.update_timing('render')
 
         def led_x(x):
@@ -293,7 +294,7 @@ class CursesRenderer(AbstractRenderer):
                                     U_LOWER_HALF_BLOCK,
                                     self.pair_for_value(value))
 
-            self.win_leds.noutrefresh()
+            self.win_leds.refresh()
         except Exception:
             self.end_curses()
             raise

@@ -3,8 +3,8 @@ import logging
 from typing import Iterable
 
 import numpy as np
-from microbit_sim.base import ImageData
-from microbit_sim.image import Image
+from microbit_sim.stub.base import ImageData
+from microbit_sim.stub.image import Image
 
 _log = logging.getLogger(__name__)
 

@@ -1,24 +1,29 @@
 import atexit
 import logging
-import queue
 import threading
 import time
 from collections import deque
 
 import zmq
+from microbit_sim.stub.button import Button
+from microbit_sim.stub.display import Display
 
 from . import conf
-from .base import Queues
-from .button import Button
 from .communication import Bus
-from .display import Display
-from .io import patch_standard_io, QueueWritableStream
+from .io import patch_standard_io, ZMQWritableStream
 from .logging import configure_logging
 
 _log = logging.getLogger(__name__)
 
 
 class Simulator:
+    """
+    Implements, or provides implementations for all ``microbit`` API methods
+    and objects that need simulation.
+
+    Communicates via a ``Bus`` instance with a ``Renderer`` instance created by
+    another process.
+    """
     def __init__(self):
         self.display = Display(update_callback=self.on_display_update)
 
@@ -28,19 +33,13 @@ class Simulator:
         self.time_start = time.time()
 
         self.zmq_context = zmq.Context()
-        #
-        # self.queues = Queues(
-        #     control=queue.Queue(),
-        #     display=queue.LifoQueue(maxsize=conf.DISPLAY_QUEUE_SIZE),
-        #     output=queue.Queue(maxsize=1000),
-        #     logging=queue.Queue(),
-        # )
 
         self.bus = Bus()
 
-        configure_logging(self.queues.logging)
+        configure_logging(filename='/tmp/microbit-simulator.log')
 
-        out_stream = QueueWritableStream(self.queues.output)
+        out_stream = ZMQWritableStream(conf.ZMQ_STDOUT_SOCKET,
+                                       self.zmq_context)
 
         self.io_patch = patch_standard_io(stdout=out_stream,
                                           stderr=out_stream)
@@ -51,14 +50,6 @@ class Simulator:
 
     def start(self):
         _log.info('Starting %r', self)
-        # logging_data = LoggingData(self.zmq_context)
-        # logging_data.gather()
-        # self.renderer = conf.get_instance(conf.RENDERER)
-        self.io_patch.start()
-        # self.gui_thread = threading.Thread(target=self.renderer.run,
-        #                                    args=(self.queues,),
-        #                                    name='gui_thread')
-        # self.gui_thread.start()
 
         atexit.register(self.stop)
 
@@ -78,20 +69,26 @@ class Simulator:
 
     def stop(self):
         self.bus.send_control('stop')
-        self.queues.control.put_nowait('stop')
+        # self.queues.control.put_nowait('stop')
         del self.renderer
 
-        self.io_patch.stop()
+        # self.io_patch.stop()
         _log.info('Stopping')
-        output = self.queues.output  # type: queue.Queue
-        if not output.empty():
-            while True:
-                try:
-                    item = output.get_nowait()
-                except queue.Empty:
-                    break
-                else:
-                    self.io_patch.real_stdout.write(item)
+        # output = self.queues.output  # type: queue.Queue
+        # if not output.empty():
+        #     while True:
+        #         try:
+        #             item = output.get_nowait()
+        #         except queue.Empty:
+        #             break
+        #         else:
+        #             self.io_patch.real_stdout.write(item)
+
+    def sleep(self, millis: int):
+        """
+        Sleep for ``millis``
+        """
+        time.sleep(millis / 1000)
 
     def running_time(self) -> int:
         """

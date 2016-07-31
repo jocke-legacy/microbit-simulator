@@ -1,8 +1,7 @@
 from typing import Union
 
 import numpy as np
-
-from . import base
+from microbit_sim.stub import base
 
 
 class Image(base.ImageData):

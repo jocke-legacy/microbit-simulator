@@ -65,11 +65,3 @@ class ImageData(abstract.ImageData):
 
     def copy(self):
         return copy.copy(self)
-
-
-Queues = typing.NamedTuple('Queues', [
-    ('control', queue.Queue),
-    ('output', queue.Queue),
-    ('logging', queue.Queue),
-    ('display', queue.Queue)
-])
