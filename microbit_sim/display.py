@@ -1,11 +1,10 @@
-import logging
 import functools
+import logging
 from typing import Iterable
 
 import numpy as np
-
-from microbit._simulator.image import Image
-from microbit._simulator.base import ImageData
+from microbit_sim.base import ImageData
+from microbit_sim.image import Image
 
 _log = logging.getLogger(__name__)
 

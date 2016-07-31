@@ -4,8 +4,7 @@ import typing
 from typing import List
 
 import numpy as np
-
-from microbit._simulator import abstract
+from microbit_sim import abstract
 
 
 class ImageData(abstract.ImageData):

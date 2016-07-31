@@ -1,4 +1,4 @@
-from microbit._simulator.renderer.layout import Layout, Box, Direction
+from _simulator.renderer.layout import Layout, Box, Direction
 
 
 def test_vertical():

@@ -1,7 +1,7 @@
 import time
-from microbit._simulator.image import Image
-from microbit._simulator.simulator import Simulator
 
+from microbit_sim.simulator import Simulator
+from microbit_sim.image import Image
 
 __all__ = [
     'Image'
@@ -20,12 +20,12 @@ def sleep(millis: int):
     time.sleep(millis / 1000)
 
 
-simulator = Simulator()
-running_time = simulator.running_time
+_simulator = Simulator()
+running_time = _simulator.running_time
 
-button_a = simulator.button_a
-button_b = simulator.button_b
+button_a = _simulator.button_a
+button_b = _simulator.button_b
 
-display = simulator.display
+display = _simulator.display
 
-simulator.start()
+_simulator.start()

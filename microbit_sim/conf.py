@@ -35,7 +35,7 @@ def env_int(key: str, default: int) -> int:
 
 RENDERER = os.environ.get(
     'RENDERER',
-    'microbit._simulator.renderer:CursesRenderer')
+    'microbit_sim.renderer:CursesRenderer')
 
 # Output/Input
 ZMQ_STDERR_SOCKET = 'inproc://stderr'
@@ -44,3 +44,8 @@ ZMQ_STDOUT_SOCKET = 'inproc://stdout'
 # Logging
 LOGGING_LEVEL = env_int('LOG_LEVEL', logging.INFO)
 LOGGING_PUB_SOCKET = 'ipc:///tmp/microbit-logging.sock'
+
+DISPLAY_QUEUE_SIZE = 1
+
+DISPLAY_SOCKET = 'ipc:///tmp/microbit-display.sock'
+CONTROL_SOCKET = 'ipc:///tmp/microbit-control.sock'

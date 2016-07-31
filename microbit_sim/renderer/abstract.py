@@ -5,7 +5,7 @@ import numpy as np
 
 class AbstractRenderer(metaclass=ABCMeta):
     @abstractmethod
-    def run(self):
+    def run(self, *args, **kwargs):
         pass
 
     @abstractmethod

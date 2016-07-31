@@ -8,8 +8,8 @@ import time
 import tty
 from contextlib import contextmanager
 
-from microbit._simulator.renderer.abstract import AbstractRenderer
-from microbit._simulator.renderer.common import format_brightness
+from microbit_sim.renderer.abstract import AbstractRenderer
+from microbit_sim.renderer.common import format_brightness
 
 _log = logging.getLogger(__name__)
 
