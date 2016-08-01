@@ -1,5 +1,10 @@
+import time
+
+import pyximport;
+from microbit_sim.renderer import common
+
+pyximport.install()
 import logging
-import zmq.asyncio
 import asyncio
 import curses
 
@@ -7,6 +12,8 @@ from microbit_sim.inputevent import ButtonEvent
 from microbit_sim.logging import configure_logging
 from microbit_sim.renderer import CursesRenderer
 from microbit_sim.communication import AsyncBus
+from microbit_sim.renderer.common import end_curses_on_exception
+from microbit_sim.renderer.speedup import _speedup
 
 _log = logging.getLogger(__name__)
 
@@ -18,21 +25,22 @@ class AsyncIOCursesRenderer(CursesRenderer):
         self.bus = AsyncBus()
         self.tasks = []
 
+    @end_curses_on_exception
     def run(self, *, loop=None):
         loop = loop or asyncio.get_event_loop()
         self.loop = loop
 
         self.start_curses()
 
-        self.add_task(self.refresh_stats())
+        self.loop.call_later(1, self.refresh_stats)
+
         self.add_task(self.listen_for_input())
-        self.add_task(self.receive_control_messages())
+        #self.add_task(self.receive_control_messages())
         self.add_task(self.receive_display_updates())
+        self.add_task(self.refresh_ui())
         self.print_tasks()
 
         loop.run_forever()
-
-        self.end_curses()
 
     async def monitor_task(self, coro):
         task = self.loop.create_task(coro)
@@ -59,7 +67,7 @@ class AsyncIOCursesRenderer(CursesRenderer):
         self.loop.call_later(5, self.print_tasks)
 
     async def listen_for_input(self):
-        ch = self.win_leds.getch()
+        ch = self.screen.getch()
         if ch != -1:
             _log.debug('ch=%r', ch)
 
@@ -70,12 +78,25 @@ class AsyncIOCursesRenderer(CursesRenderer):
 
         self.add_task(self.listen_for_input())
 
-    async def refresh_stats(self):
+    def refresh_stats(self):
+        _log.debug('refreshing stats')
+        self.loop.call_later(1 / 60, self.refresh_stats)
         self.update_timing('stats')
         self.render_stats()
 
-        self.loop.call_later(1 / 60,
-                             lambda: self.add_task(self.refresh_stats()))
+    async def refresh_ui(self):
+        t_last = 0
+        while True:
+            # Rate limiting
+            t_now = time.time()
+            delta_t = t_now - t_last
+
+            if delta_t < 1 / 60:
+                return
+
+            self.screen.refresh()
+
+            t_last = t_now
 
     async def receive_control_messages(self):
         control = await self.bus.recv_control()
@@ -88,10 +109,34 @@ class AsyncIOCursesRenderer(CursesRenderer):
         self.add_task(self.receive_control_messages())
 
     async def receive_display_updates(self):
-        #_log.debug('Waiting for display update')
-        buffer = await self.bus.recv_display()
-        self.render_display(buffer)
+        message_type, display_data = await self.bus.recv_display()
+
+        if message_type == b'display':
+            self.render_display(display_data)
+        elif message_type == b'pixel':
+            self.render_display_pixel(*display_data)
+
         self.add_task(self.receive_display_updates())
+
+    @end_curses_on_exception
+    def render_display_pixel(self, x, y, value):
+        y, x = _speedup.led_y(y), _speedup.led_x(x)
+        self.win_leds.addch(self.layout.leds.y + y,
+                            self.layout.leds.x + x,
+                            common.U_LOWER_HALF_BLOCK,
+                            _speedup.pair_number_for_value(value))
+        self.win_leds.refresh()
+
+    @end_curses_on_exception
+    def render_display(self, buffer):
+        #_log.debug('render_display(buffer=%r)', buffer)
+        self.update_timing('render')
+
+        self.win_leds.border()
+        _speedup.render_leds(self.win_leds,
+                             buffer,
+                             self.layout.microbit.y,
+                             self.layout.microbit.x)
 
 
 if __name__ == '__main__':

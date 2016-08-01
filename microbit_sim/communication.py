@@ -132,11 +132,17 @@ class Bus(BaseBus):
         return self._context
 
     @incr_stats_sent
-    def send_display(self, buffer, **kwargs):
-        return self._send_socket('display').send_array(buffer)
+    def send_display(self, buffer):
+        return self._send_socket('display').send_multipart(
+            [b'display', *pack_array(buffer)])
 
     @incr_stats_sent
-    def send_control(self, control, **kwargs):
+    def send_display_pixel(self, x, y, value):
+        return self._send_socket('display').send_multipart(
+            [b'pixel', umsgpack.packb([x, y, value])])
+
+    @incr_stats_sent
+    def send_control(self, control):
         return self._send_socket('control').send_msgpack(control)
 
     @incr_stats_rcvd
@@ -154,7 +160,13 @@ class AsyncBus(BaseBus):
 
     @incr_stats_rcvd
     async def recv_display(self):
-        return self._recv_socket('display').recv_array()
+        message_type, *message = self._recv_socket('display').recv_multipart()
+        if message_type == b'display':
+            return message_type, unpack_array(*message)
+        elif message_type == b'pixel':
+            return message_type, umsgpack.unpackb(message[0])
+        else:
+            raise ValueError('Unknown message type {!r}'.format(message_type))
 
     @incr_stats_rcvd
     def recv_control(self):
@@ -166,25 +178,34 @@ class AsyncBus(BaseBus):
             inputevent.pack(event))
 
 
-def send_array(socket, A, flags=0, copy=True, track=False):
-    """send a numpy array with metadata"""
-    md = dict(
-        dtype=str(A.dtype),
-        shape=A.shape,
-    )
-    return socket.send_multipart([umsgpack.packb(md), A],
+def send_array(socket, numpy_array, flags=0, copy=True, track=False):
+    """
+    Send a numpy array with metadata.
+    """
+    return socket.send_multipart(pack_array(numpy_array),
                                  flags=flags,
                                  copy=copy,
                                  track=track)
 
 
 async def recv_array(socket, flags=0, copy=True, track=False):
-    """recv a numpy array"""
     multipart = await socket.recv_multipart(flags=flags, copy=copy,
                                             track=track)
     metadata_bytes, msg = multipart
+    return unpack_array(metadata_bytes, msg)
+
+
+def pack_array(numpy_array):
+    metadata = dict(
+        dtype=str(numpy_array.dtype),
+        shape=numpy_array.shape,
+    )
+    return [umsgpack.packb(metadata), numpy_array]
+
+
+def unpack_array(metadata_bytes, buffer):
     metadata = umsgpack.unpackb(metadata_bytes)
-    buf = memoryview(msg)
+    buf = memoryview(buffer)
     numpy_array = numpy.frombuffer(buf, dtype=metadata['dtype'])
     return numpy_array.reshape(metadata['shape'])
 

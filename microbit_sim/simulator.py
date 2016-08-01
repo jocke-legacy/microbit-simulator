@@ -27,7 +27,9 @@ class Simulator:
     another process.
     """
     def __init__(self):
-        self.display = Display(update_callback=self.on_display_update)
+        self.display = Display(
+            update_callback=self.on_display_update,
+            pixel_update_callback=self.on_display_pixel_update)
 
         self.button_a = Button('button_a')
         self.button_b = Button('button_b')
@@ -82,6 +84,9 @@ class Simulator:
                         _log.error('Unknown event type: %r', input_event.type)
             else:
                 _log.error('Unknown event %r', input_event)
+
+    def on_display_pixel_update(self, x, y, value):
+        self.bus.send_display_pixel(x, y, value)
 
     def on_display_update(self, buffer):
         # # Rate limiting

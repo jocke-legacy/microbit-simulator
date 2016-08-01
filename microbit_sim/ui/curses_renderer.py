@@ -1,55 +1,25 @@
-import io
+import pyximport; pyximport.install()
+
 import logging
 import curses
 import queue
 from collections import defaultdict
-from collections import deque, namedtuple
+from collections import deque
 from datetime import datetime
-
-import numpy as np
-
-import sys
 
 import time
 
+from microbit_sim.renderer.speedup import _speedup
+
 from microbit_sim.renderer.abstract import AbstractRenderer
-from microbit_sim.renderer.common import U_LOWER_HALF_BLOCK, BRIGHTNESS_8BIT
+from microbit_sim.renderer.common import start_curses, end_curses_on_exception, update_layout
 
 COUNTER_SMOOTHING = 0.9
 
 _log = logging.getLogger(__name__)
 
-Layout = namedtuple('Layout', [
-    'screen',
-    'microbit',
-    'leds',
-    'output',
-    'stats',
-])
-
-
-class Rect:
-    def __init__(self, x=None, y=None, width=None, height=None):
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
-
-    def __repr__(self):
-        return '<Rect x={self.x}, y={self.y}, ' \
-               'width={self.width}, height={self.height}>'.format(self=self)
-
-    @property
-    def y2(self):
-        return self.y + self.height
-
-    @property
-    def x2(self):
-        return self.x + self.width
-
 
 class CursesRenderer(AbstractRenderer):
-    COLORS_BRIGHTNESS_RANGE = (17, 17 + len(BRIGHTNESS_8BIT))
     MIN_TICK_DELTA = 1 / 1000
     OUTPUT_MAX_LINES = 1000
 
@@ -85,23 +55,12 @@ class CursesRenderer(AbstractRenderer):
         self.counters[name] = ((average * COUNTER_SMOOTHING) +
                                (per_second * (1.0 - COUNTER_SMOOTHING)))
 
+    @end_curses_on_exception
     def start_curses(self):
-        self.screen = curses.initscr()
-
-        # What curses.wrapper does
-        curses.noecho()
-        curses.cbreak()
-
-        # Hide cursor
-        curses.curs_set(0)
-
-        # Colors
-        curses.start_color()
-        curses.use_default_colors()
-        self.init_colors()
+        self.screen = start_curses()
 
         # Layout
-        self.update_layout()
+        self.layout = update_layout(self.screen)
 
         # Windows
         # self.w_microbit = self.screen.subwin(self.layout.microbit.height,
@@ -123,42 +82,7 @@ class CursesRenderer(AbstractRenderer):
                                             self.layout.stats.y,
                                             self.layout.stats.x)
 
-        # Set input
-        self.screen.timeout(10)
-        self.screen.keypad(True)
-
-        self.win_leds.timeout(10)
-        self.win_leds.keypad(True)
-
-    def update_layout(self):
-        available_height, available_width = self.screen.getmaxyx()
-        screen = Rect(x=0, y=0, width=available_width, height=available_height)
-
-        leds = Rect(x=4, y=2, width=13, height=7)
-
-        microbit = Rect(x=0, y=0,
-                        width=leds.width + leds.x * 2,
-                        height=leds.height + leds.y * 2)
-
-        available_height -= microbit.height
-
-        stats = Rect(y=microbit.y2 + available_height - 1, x=0,
-                     width=screen.width,
-                     height=1)
-
-        available_height -= stats.height
-
-        output = Rect(y=microbit.y2, x=0,
-                      width=available_width,
-                      height=available_height)
-
-        self.layout = Layout(screen=screen,
-                             microbit=microbit,
-                             leds=leds,
-                             output=output,
-                             stats=stats)
-        _log.info('updated layout=%r', self.layout)
-
+    @end_curses_on_exception
     def run(self, queues):
         self.start_curses()
 
@@ -202,8 +126,6 @@ class CursesRenderer(AbstractRenderer):
 
             self.get_input()
 
-        self.end_curses()
-
     def render_stats(self):
         self.win_stats.clear()
         self.win_stats.addstr(
@@ -244,29 +166,7 @@ class CursesRenderer(AbstractRenderer):
             self.layout.output.y2 - 2,
             self.layout.output.x2 - 1)
 
-    def end_curses(self):
-        if curses.isendwin():
-            _log.warning('Curses already ended')
-            return
-
-        self.screen.keypad(0)
-        curses.nocbreak()
-        curses.echo()
-        curses.endwin()
-
-    def init_colors(self):
-        _log.debug('Init colors')
-        for color_number, (value, red) in zip(
-                range(*self.COLORS_BRIGHTNESS_RANGE),
-                enumerate(BRIGHTNESS_8BIT)):
-            curses.init_color(color_number, int(red / 255 * 1000), 0, 0)
-            curses.init_pair(color_number, color_number, -1)
-
-        _log.debug('colors initiated')
-
-    def pair_for_value(self, value):
-        return curses.color_pair(self.COLORS_BRIGHTNESS_RANGE[0] + value)
-
+    @end_curses_on_exception
     def get_input(self):
         from microbit import button_a, button_b
 
@@ -277,27 +177,24 @@ class CursesRenderer(AbstractRenderer):
         elif ch == curses.KEY_RIGHT:
             button_b._press()
 
+    @end_curses_on_exception
     def render_display(self, buffer):
         #_log.debug('render_display(buffer=%r)', buffer)
         self.update_timing('render')
+        #
+        # def led_x(x):
+        #     return self.layout.microbit.x + x * 2 + 2
+        #
+        # def led_y(y):
+        #     return self.layout.microbit.y + y + 1
 
-        def led_x(x):
-            return self.layout.microbit.x + x * 2 + 2
+        self.win_leds.border()
+        args = _speedup.render_leds(buffer, self.layout.microbit.y,
+                                    self.layout.microbit.x)
+        for y, x, char, pair_number in args:
 
-        def led_y(y):
-            return self.layout.microbit.y + y + 1
+            self.win_leds.addch(y, x,
+                                char,
+                                curses.color_pair(pair_number))
 
-        try:
-            self.win_leds.border()
-            for (y, x), value in np.ndenumerate(buffer):
-                self.win_leds.addch(led_y(y), led_x(x),
-                                    U_LOWER_HALF_BLOCK,
-                                    self.pair_for_value(value))
-
-            self.win_leds.refresh()
-        except Exception:
-            self.end_curses()
-            raise
-
-    def __del__(self):
-        self.end_curses()
+        self.win_leds.refresh()

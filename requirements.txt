@@ -2,3 +2,5 @@ pyzmq
 numpy
 colorlog==2.7.0
 u-msgpack-python==2.1
+decorator==4.0.10
+Cython==0.24.1

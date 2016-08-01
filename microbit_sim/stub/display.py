@@ -26,8 +26,9 @@ def updates(func):
 
 
 class Display(ImageData):
-    def __init__(self, update_callback):
+    def __init__(self, update_callback, pixel_update_callback):
         self._update_callback = update_callback
+        self._pixel_update_callback = pixel_update_callback
 
         super().__init__(width=5, height=5)
         self._on = True
@@ -45,6 +46,7 @@ class Display(ImageData):
 
     @updates
     def set_pixel(self, x, y, value):
+        self._pixel_update_callback(x, y, value)
         return super(Display, self).set_pixel(x, y, value)
 
     @updates
