@@ -1,6 +1,6 @@
 import time
 
-import datetime
+from datetime import datetime
 import numpy as np
 from microbit_sim.ui import common
 
@@ -14,7 +14,7 @@ from microbit_sim.bus import AsyncBus
 from microbit_sim.ui.common import end_curses_on_exception
 from microbit_sim.ui.speedup import _speedup
 #from microbit_sim.ui.speedup.zmq_interface import ZMQUIInterface
-from microbit_sim.ui.speedup._speedup import rate_limit
+from microbit_sim.ui.speedup._speedup import  ratelimit
 
 _log = logging.getLogger(__name__)
 
@@ -32,11 +32,11 @@ class AsyncIOCursesUI(CursesRenderer):
 
         self.loop.call_soon(self.refresh_stats)
 
-        # self.add_task(self.listen_for_input())
-        #self.add_task(self.receive_control_messages())
+        self.add_task(self.listen_for_input())
+        self.add_task(self.receive_control_messages())
         self.add_task(self.receive_display_updates())
         self.add_task(self.refresh_ui())
-        self.print_tasks()
+        self.loop.call_soon(self.print_tasks)
 
         self.loop.run_forever()
 
@@ -62,7 +62,7 @@ class AsyncIOCursesUI(CursesRenderer):
             output += ' - {!r}\n'.format(task)
 
         self.add_output(output)
-        self.loop.call_later(5, self.print_tasks)
+        self.loop.call_later(1, self.print_tasks)
 
     async def listen_for_input(self):
         ch = self.screen.getch()
@@ -82,17 +82,19 @@ class AsyncIOCursesUI(CursesRenderer):
 
     async def refresh_ui(self):
         t_last = 0
+        min_delta = 1 / 60
+
         def sleep(delta, min_delta):
             yield from asyncio.sleep(min_delta - delta)
 
-        #for _ in rate_limit(1 / 60, sleep):
+        # async for _ in ratelimit(1 / 60):
         while True:
             # Rate limiting
             t_now = time.time()
             delta_t = t_now - t_last
 
-            if delta_t < 1 / 60:
-                await asyncio.sleep(0.0001)
+            if delta_t < min_delta:
+                await asyncio.sleep(min_delta - delta_t)
             t_last = t_now
 
             self.update_timing('ui')
@@ -137,11 +139,9 @@ class AsyncIOCursesUI(CursesRenderer):
         self.win_leds.refresh()
 
     def led_y(self, y):
-        #return self.layout.leds.y + y + 1
         return y + 1
 
     def led_x(self, x):
-        # return self.layout.leds.x + x * 2 + 2
         return x * 2 + 2
 
     @end_curses_on_exception
@@ -162,15 +162,17 @@ class AsyncIOCursesUI(CursesRenderer):
                           common.U_LOWER_HALF_BLOCK,
                           common.pair_for_value(value))
 
-            self.win_leds.refresh()
+            #self.win_leds.refresh()
 
     def render_stats(self):
         # self.win_stats.clear()
+        self.update_timing('stats')
         self.win_stats.addstr(0, 0,
                               '{datetime}: '
                               'render: {counters[render]:.2f}/s, '
                               'mainloop: {counters[mainloop]:.2f}/s, '
-                              'stats: {counters[stats]:.2f}/s'
+                              'stats: {counters[stats]:.2f}/s, '
+                              'ui: {counters[ui]:.2f}/s'
                               .format(counters=self.counters,
                                       datetime=datetime.now().isoformat(sep=' ')))
         self.win_stats.noutrefresh()

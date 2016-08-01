@@ -1,5 +1,6 @@
 import curses
 cimport curses
+import asyncio
 
 import numpy as np
 import time
@@ -59,3 +60,23 @@ def rate_limit(min_delta, callback=None):
             continue
 
         yield
+
+
+class ratelimit:
+    def __init__(self, float min_delta):
+        cdef float t_last = 0
+        self.t_last = t_last
+        self.min_delta = min_delta
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        t_now = time.time()
+        cdef float t_delta = t_now - self.t_last
+
+        if t_delta < self.min_delta:
+            await asyncio.sleep(self.min_delta - t_delta)
+
+        self.t_last = t_now
+        return t_now

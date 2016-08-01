@@ -49,7 +49,7 @@ def start_curses(hide_cursor=True):
     curses.cbreak()
 
     # Hide cursor
-    #curses.curs_set(not hide_cursor)
+    curses.curs_set(not hide_cursor)
 
     # Colors
     curses.start_color()
