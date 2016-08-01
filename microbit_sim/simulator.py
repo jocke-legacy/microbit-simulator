@@ -11,7 +11,7 @@ from microbit_sim.stub.button import Button
 from microbit_sim.stub.display import Display
 
 from . import conf
-from .communication import Bus
+from .bus import Bus
 from .io import patch_standard_io, ZMQWritableStream
 from .logging import configure_logging
 
@@ -86,7 +86,7 @@ class Simulator:
                 _log.error('Unknown event %r', input_event)
 
     def on_display_pixel_update(self, x, y, value):
-        self.bus.send_display_pixel(x, y, value)
+        pass#self.bus.send_display_pixel(x, y, value)
 
     def on_display_update(self, buffer):
         # # Rate limiting

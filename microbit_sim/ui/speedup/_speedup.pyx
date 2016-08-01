@@ -2,7 +2,8 @@ import curses
 cimport curses
 
 import numpy as np
-from microbit_sim.renderer import common
+import time
+from microbit_sim.ui import common
 cimport numpy as np
 
 cdef render_output(pad, win, output_lines, output_layout):
@@ -40,3 +41,21 @@ def render_leds(win,
                   offset_x + c_led_x(x),
                   common.U_LOWER_HALF_BLOCK,
                   curses.color_pair(cy_pair_number_for_value(value)))
+
+
+def rate_limit(min_delta, callback=None):
+    cdef int t_last = 0
+    cdef int t_now, delta_t
+
+    while True:
+        t_now = time.time()
+        delta_t = t_now - t_last
+
+        if delta_t < min_delta:
+            if callback is not None:
+                callback(delta_t, min_delta)
+            else:
+                time.sleep(min_delta - delta_t)
+            continue
+
+        yield

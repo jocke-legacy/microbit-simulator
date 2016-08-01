@@ -1,46 +1,43 @@
 import time
 
-import pyximport;
-from microbit_sim.renderer import common
+import numpy as np
+from microbit_sim.ui import common
 
-pyximport.install()
 import logging
 import asyncio
 import curses
 
 from microbit_sim.inputevent import ButtonEvent
-from microbit_sim.logging import configure_logging
-from microbit_sim.renderer import CursesRenderer
-from microbit_sim.communication import AsyncBus
-from microbit_sim.renderer.common import end_curses_on_exception
-from microbit_sim.renderer.speedup import _speedup
+from microbit_sim.ui.curses_renderer import CursesRenderer
+from microbit_sim.bus import AsyncBus
+from microbit_sim.ui.common import end_curses_on_exception
+from microbit_sim.ui.speedup import _speedup
+#from microbit_sim.ui.speedup.zmq_interface import ZMQUIInterface
+from microbit_sim.ui.speedup._speedup import rate_limit
 
 _log = logging.getLogger(__name__)
 
 
-class AsyncIOCursesRenderer(CursesRenderer):
-    def __init__(self):
-        super().__init__()
-
+class AsyncIOCursesUI(CursesRenderer):
+    def __init__(self, *, loop=None):
         self.bus = AsyncBus()
         self.tasks = []
+        self.loop = loop or asyncio.get_event_loop()
+        super().__init__()
 
     @end_curses_on_exception
-    def run(self, *, loop=None):
-        loop = loop or asyncio.get_event_loop()
-        self.loop = loop
-
+    def run(self):
         self.start_curses()
 
-        self.loop.call_later(1, self.refresh_stats)
+        self.loop.call_soon(self.refresh_stats)
 
-        self.add_task(self.listen_for_input())
+        # self.add_task(self.listen_for_input())
         #self.add_task(self.receive_control_messages())
         self.add_task(self.receive_display_updates())
         self.add_task(self.refresh_ui())
         self.print_tasks()
 
-        loop.run_forever()
+        self.loop.run_forever()
 
     async def monitor_task(self, coro):
         task = self.loop.create_task(coro)
@@ -79,24 +76,29 @@ class AsyncIOCursesRenderer(CursesRenderer):
         self.add_task(self.listen_for_input())
 
     def refresh_stats(self):
-        _log.debug('refreshing stats')
-        self.loop.call_later(1 / 60, self.refresh_stats)
-        self.update_timing('stats')
         self.render_stats()
+        self.loop.call_later(1 / 60, self.refresh_stats)
 
     async def refresh_ui(self):
         t_last = 0
+        def sleep(delta, min_delta):
+            yield from asyncio.sleep(min_delta - delta)
+
+        #for _ in rate_limit(1 / 60, sleep):
         while True:
             # Rate limiting
             t_now = time.time()
             delta_t = t_now - t_last
 
             if delta_t < 1 / 60:
-                return
+                await asyncio.sleep(0.0001)
+            t_last = t_now
+
+            self.update_timing('ui')
 
             self.screen.refresh()
-
-            t_last = t_now
+            self.win_leds.refresh()
+            self.win_output.refresh()
 
     async def receive_control_messages(self):
         control = await self.bus.recv_control()
@@ -109,14 +111,20 @@ class AsyncIOCursesRenderer(CursesRenderer):
         self.add_task(self.receive_control_messages())
 
     async def receive_display_updates(self):
-        message_type, display_data = await self.bus.recv_display()
+        while True:
+            # _log.info('Display update')
+            # message_type, display_data = await self.bus.recv_display()
+            #
+            # if message_type == b'display':
+            #     self.render_display(display_data)
+            # elif message_type == b'pixel':
+            #     self.render_display_pixel(*display_data)
+            buffer = await self.bus.recv_display()
+            self.render_display(buffer)
 
-        if message_type == b'display':
-            self.render_display(display_data)
-        elif message_type == b'pixel':
-            self.render_display_pixel(*display_data)
+            await asyncio.sleep(0)
 
-        self.add_task(self.receive_display_updates())
+        #self.add_task(self.receive_display_updates())
 
     @end_curses_on_exception
     def render_display_pixel(self, x, y, value):
@@ -124,8 +132,16 @@ class AsyncIOCursesRenderer(CursesRenderer):
         self.win_leds.addch(self.layout.leds.y + y,
                             self.layout.leds.x + x,
                             common.U_LOWER_HALF_BLOCK,
-                            _speedup.pair_number_for_value(value))
+                            common.pair_for_value(value))
         self.win_leds.refresh()
+
+    def led_y(self, y):
+        #return self.layout.leds.y + y + 1
+        return y + 1
+
+    def led_x(self, x):
+        # return self.layout.leds.x + x * 2 + 2
+        return x * 2 + 2
 
     @end_curses_on_exception
     def render_display(self, buffer):
@@ -133,18 +149,28 @@ class AsyncIOCursesRenderer(CursesRenderer):
         self.update_timing('render')
 
         self.win_leds.border()
-        _speedup.render_leds(self.win_leds,
-                             buffer,
-                             self.layout.microbit.y,
-                             self.layout.microbit.x)
+        if False:
+            _speedup.render_leds(self.win_leds,
+                                 buffer,
+                                 self.layout.microbit.y,
+                                 self.layout.microbit.x)
+        else:
+            for (y, x), value in np.ndenumerate(buffer):
+                self.win_leds.addch(self.led_y(y),
+                          self.led_x(x),
+                          common.U_LOWER_HALF_BLOCK,
+                          common.pair_for_value(value))
+
+            self.win_leds.refresh()
 
 
-if __name__ == '__main__':
-    # loop = zmq.asyncio.ZMQEventLoop()
-    # asyncio.set_event_loop(loop)
-    configure_logging(filename='/tmp/microbit-renderer.log')
-    try:
-        AsyncIOCursesRenderer().run()
-    finally:
-        if not curses.isendwin():
-            curses.endwin()
+    def render_stats(self):
+        # self.win_stats.clear()
+        self.win_stats.addstr(0, 0,
+                              '{datetime}: '
+                              'render: {counters[render]:.2f}/s, '
+                              'mainloop: {counters[mainloop]:.2f}/s, '
+                              'stats: {counters[stats]:.2f}/s'
+                              .format(counters=self.counters,
+                                      datetime=datetime.now().isoformat(sep=' ')))
+        self.win_stats.noutrefresh()

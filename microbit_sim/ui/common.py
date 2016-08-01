@@ -3,6 +3,7 @@ import logging
 from collections import namedtuple
 
 import numpy as np
+import time
 from decorator import decorator
 
 _log = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ def start_curses(hide_cursor=True):
     curses.cbreak()
 
     # Hide cursor
-    curses.curs_set(not hide_cursor)
+    #curses.curs_set(not hide_cursor)
 
     # Colors
     curses.start_color()
@@ -158,3 +159,4 @@ Layout = namedtuple('Layout', [
     'output',
     'stats',
 ])
+

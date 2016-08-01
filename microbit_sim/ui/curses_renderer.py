@@ -9,10 +9,11 @@ from datetime import datetime
 
 import time
 
-from microbit_sim.renderer.speedup import _speedup
+from microbit_sim.ui.speedup import _speedup
 
-from microbit_sim.renderer.abstract import AbstractRenderer
-from microbit_sim.renderer.common import start_curses, end_curses_on_exception, update_layout
+from microbit_sim.ui.abstract import AbstractRenderer
+from microbit_sim.ui.common import start_curses, end_curses_on_exception, \
+    update_layout
 
 COUNTER_SMOOTHING = 0.9
 
@@ -81,61 +82,6 @@ class CursesRenderer(AbstractRenderer):
                                             self.layout.stats.width,
                                             self.layout.stats.y,
                                             self.layout.stats.x)
-
-    @end_curses_on_exception
-    def run(self, queues):
-        self.start_curses()
-
-        while True:
-            self.update_timing('mainloop')
-            # Rate limiting
-            t_now = time.time()
-            delta_t = t_now - self._time_last_tick
-
-            if delta_t < self.MIN_TICK_DELTA:
-                time.sleep(self.MIN_TICK_DELTA - delta_t)
-
-            self._time_last_tick = t_now
-
-            try:
-                control = queues.control.get_nowait()
-            except queue.Empty:
-                pass
-            else:
-                if control == 'stop':
-                    _log.info('Stopping')
-                    break
-
-            try:
-                buffer = queues.display.get_nowait()
-            except queue.Empty:
-                pass
-            else:
-                self.render_display(buffer)
-
-            try:
-                output = queues.output.get_nowait()
-            except queue.Empty:
-                pass
-            else:
-                self.add_output(output)
-
-            curses.doupdate()
-
-            self.render_stats()
-
-            self.get_input()
-
-    def render_stats(self):
-        self.win_stats.clear()
-        self.win_stats.addstr(
-            '{datetime}: '
-            'render: {counters[render]:.2f}/s, '
-            'mainloop: {counters[mainloop]:.2f}/s, '
-            'stats: {counters[stats]:.2f}/s'
-            .format(counters=self.counters,
-                    datetime=datetime.now().isoformat(sep=' ')))
-        self.win_stats.noutrefresh()
 
     def add_output(self, output):
         _log.debug('add_output(output=%r)', output)

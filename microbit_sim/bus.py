@@ -133,13 +133,12 @@ class Bus(BaseBus):
 
     @incr_stats_sent
     def send_display(self, buffer):
-        return self._send_socket('display').send_multipart(
-            [b'display', *pack_array(buffer)])
+        return self._send_socket('display').send_array(buffer)
 
     @incr_stats_sent
     def send_display_pixel(self, x, y, value):
         return self._send_socket('display').send_multipart(
-            [b'pixel', umsgpack.packb([x, y, value])])
+            [b'pixel', x, y, value])
 
     @incr_stats_sent
     def send_control(self, control):
@@ -160,13 +159,16 @@ class AsyncBus(BaseBus):
 
     @incr_stats_rcvd
     async def recv_display(self):
-        message_type, *message = self._recv_socket('display').recv_multipart()
-        if message_type == b'display':
-            return message_type, unpack_array(*message)
-        elif message_type == b'pixel':
-            return message_type, umsgpack.unpackb(message[0])
-        else:
-            raise ValueError('Unknown message type {!r}'.format(message_type))
+        return self._recv_socket('display').recv_array()
+        # message_type, *message_rest = self._recv_socket('display')\
+        #     .recv_multipart()
+        #
+        # if message_type == b'display':
+        #     return message_type, unpack_array(*message_rest)
+        # elif message_type == b'pixel':
+        #     return message_type, message_rest
+        # else:
+        #     raise ValueError('Unknown message type {!r}'.format(message_type))
 
     @incr_stats_rcvd
     def recv_control(self):
