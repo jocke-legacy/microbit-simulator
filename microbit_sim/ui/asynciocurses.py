@@ -134,7 +134,7 @@ class AsyncIOCursesUI:
 
     @common.tail_recursive
     async def receive_display_updates(self):
-        async for _ in common.ratelimit(0):
+        # async for _ in common.ratelimit(0):
             # _log.info('Display update')
             # message_type, display_data = await self.bus.recv_display()
             #
@@ -142,12 +142,10 @@ class AsyncIOCursesUI:
             #     self.render_display(display_data)
             # elif message_type == b'pixel':
             #     self.render_display_pixel(*display_data)
-            buffer = await self.bus.recv_display()
-            self.update_timing('recv_display')
-            self.render_stats()
-            self.render_display(buffer)
-
-            await asyncio.sleep(0)
+        buffer = await self.bus.recv_display()
+        self.update_timing('recv_display')
+        self.render_stats()
+        self.render_display(buffer)
 
         #self.add_task(self.receive_display_updates())
     #
