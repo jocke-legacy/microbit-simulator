@@ -1,5 +1,6 @@
 import time
 
+import datetime
 import numpy as np
 from microbit_sim.ui import common
 
@@ -162,7 +163,6 @@ class AsyncIOCursesUI(CursesRenderer):
                           common.pair_for_value(value))
 
             self.win_leds.refresh()
-
 
     def render_stats(self):
         # self.win_stats.clear()
