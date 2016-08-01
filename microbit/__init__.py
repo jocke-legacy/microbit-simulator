@@ -1,3 +1,4 @@
+import pyximport; pyximport.install()
 from microbit_sim.simulator import Simulator
 from microbit_sim.stub.image import Image
 

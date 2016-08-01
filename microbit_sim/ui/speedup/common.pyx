@@ -2,6 +2,7 @@ import curses
 cimport curses
 import asyncio
 
+import cython
 import numpy as np
 import time
 from microbit_sim.ui import common
@@ -62,6 +63,18 @@ def rate_limit(min_delta, callback=None):
         yield
 
 
+@cython.cdivision(True)
+cpdef update_timing_average(double t_last, double average,
+                            double smoothing=0.9):
+    cdef double t_now = time.time()
+    cdef double t_delta = t_now - t_last
+
+    cdef double new_average = ((average * smoothing) +
+                              (1 / t_delta * (1.0 - smoothing)))
+
+    return t_now, new_average
+
+
 class ratelimit:
     def __init__(self, float min_delta):
         cdef float t_last = 0
@@ -75,8 +88,8 @@ class ratelimit:
         t_now = time.time()
         cdef float t_delta = t_now - self.t_last
 
-        if t_delta < self.min_delta:
-            await asyncio.sleep(self.min_delta - t_delta)
+        #if t_delta < self.min_delta:
+        await asyncio.sleep(self.min_delta - t_delta)
 
         self.t_last = t_now
         return t_now

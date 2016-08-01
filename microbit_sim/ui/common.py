@@ -1,7 +1,9 @@
 import curses
+import functools
 import logging
 from collections import namedtuple
 
+import asyncio
 import numpy as np
 import time
 from decorator import decorator
@@ -27,6 +29,10 @@ BRIGHTNESS = BRIGHTNESS_UNICODE_BLOCK
 
 BRIGHTNESS_8BIT = np.linspace(0, 255, num=10, dtype=int)
 
+CURSES_LED_COLOR_RANGE = (17, 17 + len(BRIGHTNESS_8BIT))
+
+OUTPUT_MAX_LINES = 1000
+
 
 def ansi_brightness(value):
     return '\x1b[38;2;{red};0;0m'.format(red=BRIGHTNESS_8BIT[value])
@@ -39,6 +45,26 @@ def format_brightness(value, char=U_LOWER_HALF_BLOCK):
 
 
 BRIGHTNESS_8BIT_ANSI = [format_brightness(value) for value in range(0, 10)]
+
+
+class Rect:
+    def __init__(self, x=None, y=None, width=None, height=None):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+
+    def __repr__(self):
+        return '<Rect x={self.x}, y={self.y}, ' \
+               'width={self.width}, height={self.height}>'.format(self=self)
+
+    @property
+    def y2(self):
+        return self.y + self.height
+
+    @property
+    def x2(self):
+        return self.x + self.width
 
 
 def start_curses(hide_cursor=True):
@@ -57,7 +83,7 @@ def start_curses(hide_cursor=True):
     init_colors()
 
     # Set input timeout to speed up .getch()
-    screen.timeout(1)
+    screen.timeout(0)
     screen.keypad(True)
 
     return screen
@@ -74,16 +100,15 @@ def end_curses():
     curses.endwin()
 
 
-@decorator
-def end_curses_on_exception(func, *args, **kwargs):
-    try:
-        return func(*args, **kwargs)
-    except Exception:
-        end_curses()
-        raise
+def end_curses_on_exception(func):
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception:
+            end_curses()
+            raise
 
-
-CURSES_LED_COLOR_RANGE = (17, 17 + len(BRIGHTNESS_8BIT))
+    return wrapper
 
 
 def pair_for_value(value):
@@ -99,6 +124,15 @@ def init_colors():
         curses.init_pair(color_number, color_number, -1)
 
     _log.debug('colors initiated')
+
+
+Layout = namedtuple('Layout', [
+    'screen',
+    'microbit',
+    'leds',
+    'output',
+    'stats',
+])
 
 
 def update_layout(screen):
@@ -132,31 +166,87 @@ def update_layout(screen):
     return layout
 
 
-class Rect:
-    def __init__(self, x=None, y=None, width=None, height=None):
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
-
-    def __repr__(self):
-        return '<Rect x={self.x}, y={self.y}, ' \
-               'width={self.width}, height={self.height}>'.format(self=self)
-
-    @property
-    def y2(self):
-        return self.y + self.height
-
-    @property
-    def x2(self):
-        return self.x + self.width
-
-
-Layout = namedtuple('Layout', [
-    'screen',
-    'microbit',
+Windows = namedtuple('Windows', [
     'leds',
     'output',
-    'stats',
+    'output_pad',
+    'stats'
 ])
 
+
+def create_windows(screen, layout):
+    microbit = screen.subwin(layout.microbit.height,
+                             layout.microbit.width,
+                             layout.microbit.y,
+                             layout.microbit.x)
+
+    leds = screen.subwin(layout.leds.height,
+                         layout.leds.width,
+                         layout.leds.y,
+                         layout.leds.x)
+
+    output = curses.newwin(layout.output.height,
+                           layout.output.width,
+                           layout.output.y,
+                           layout.output.x)
+
+    output_pad = curses.newpad(OUTPUT_MAX_LINES,
+                               layout.output.width - 2)
+
+    stats = screen.subwin(layout.stats.height,
+                          layout.stats.width,
+                          layout.stats.y,
+                          layout.stats.x)
+
+    leds.border()
+    leds.refresh()
+    microbit.border()
+    microbit.refresh()
+    output.border()
+    output.refresh()
+
+    return Windows(leds=leds,
+                   output=output,
+                   output_pad=output_pad,
+                   stats=stats)
+
+
+def update_timing_average(t_last, average, smoothing=0.9):
+    t_now = time.time()
+    t_delta = t_now - t_last
+
+    new_average = ((average * smoothing) +
+                   (1 / t_delta * (1.0 - smoothing)))
+
+    return t_now, new_average
+
+
+class ratelimit:
+    def __init__(self, min_delta):
+        self.t_last = 0
+        self.min_delta = min_delta
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        t_now = time.time()
+        t_delta = t_now - self.t_last
+
+        t_remaining = self.min_delta - t_delta
+        if t_remaining > 0:
+            await asyncio.sleep(t_remaining)
+
+        self.t_last = t_now
+        return t_now
+
+
+def tail_recursive(coro):
+    loop = asyncio.get_event_loop()
+
+    @functools.wraps(coro)
+    async def wrapper(*args, **kwargs):
+        result = await coro(*args, **kwargs)
+        loop.create_task(coro)
+
+    return wrapper
