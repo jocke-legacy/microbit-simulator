@@ -19,6 +19,7 @@ BRIGHTNESS = BRIGHTNESS_UNICODE_BLOCK
 
 BRIGHTNESS_8BIT = np.linspace(0, 255, num=10, dtype=int)
 
+
 def ansi_brightness(value):
     return '\x1b[38;2;{red};0;0m'.format(red=BRIGHTNESS_8BIT[value])
 
@@ -27,5 +28,6 @@ def format_brightness(value, char=U_LOWER_HALF_BLOCK):
     return '{}{char}\x1b[0m'.format(
         ansi_brightness(value),
         char=char)
+
 
 BRIGHTNESS_8BIT_ANSI = [format_brightness(value) for value in range(0, 10)]

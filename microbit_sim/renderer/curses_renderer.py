@@ -210,7 +210,7 @@ class CursesRenderer(AbstractRenderer):
             '{datetime}: '
             'render: {counters[render]:.2f}/s, '
             'mainloop: {counters[mainloop]:.2f}/s, '
-            'stats: {counters[mainloop]:.2f}/s'
+            'stats: {counters[stats]:.2f}/s'
             .format(counters=self.counters,
                     datetime=datetime.now().isoformat(sep=' ')))
         self.win_stats.noutrefresh()
@@ -278,7 +278,7 @@ class CursesRenderer(AbstractRenderer):
             button_b._press()
 
     def render_display(self, buffer):
-        _log.debug('render_display(buffer=%r)', buffer)
+        #_log.debug('render_display(buffer=%r)', buffer)
         self.update_timing('render')
 
         def led_x(x):

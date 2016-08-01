@@ -73,13 +73,17 @@ class BaseBus(AbstractBus):
         self._context = None
 
         control_socket = self.context.socket(zmq_ext.PAIR)
-        microbit_input_socket = self.context.socket(zmq_ext.PAIR)
+        input_send_socket = self.context.socket(zmq_ext.PUSH)
+        input_recv_socket = self.context.socket(zmq_ext.PULL)
+
+        display_send_socket = self.context.socket(zmq_ext.PUSH)
+        display_send_socket.hwm = 1
 
         self.sockets = {
             'display': {
                 'recv': Connect(self.context.socket(zmq_ext.PULL),
                                 conf.DISPLAY_SOCKET),
-                'send': Bind(self.context.socket(zmq_ext.PUSH),
+                'send': Bind(display_send_socket,
                              conf.DISPLAY_SOCKET),
             },
             'control': {
@@ -87,9 +91,9 @@ class BaseBus(AbstractBus):
                 'send': Connect(control_socket, conf.CONTROL_SOCKET),
             },
             'input-events': {
-                'recv': Bind(self.context.socket(zmq_ext.PAIR),
+                'recv': Bind(input_recv_socket,
                              conf.INPUT_EVENTS_SOCKET),
-                'send': Connect(self.context.socket(zmq_ext.PAIR),
+                'send': Connect(input_send_socket,
                                 conf.INPUT_EVENTS_SOCKET)
             }
         }
@@ -108,11 +112,6 @@ class BaseBus(AbstractBus):
 
     def get_socket_addr(self, socket_name):
         return self.sockets[socket_name]['addr']
-
-    @incr_stats_sent
-    def send_input_event(self, event):
-        return self._send_socket('input-events').send_msgpack(
-            inputevent.pack(event))
 
     def __repr__(self):
         return '<{self.__class__.__name__} {self.stats!r}>'.format(self=self)
@@ -160,6 +159,11 @@ class AsyncBus(BaseBus):
     @incr_stats_rcvd
     def recv_control(self):
         return self._recv_socket('control').recv_msgpack()
+
+    @incr_stats_sent
+    def send_input_event(self, event):
+        return self._send_socket('input-events').send_msgpack(
+            inputevent.pack(event))
 
 
 def send_array(socket, A, flags=0, copy=True, track=False):

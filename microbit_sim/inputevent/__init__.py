@@ -15,7 +15,7 @@ EVENT_TYPE_MSGPACK_EXT = dict(
 
 def pack(event: BaseEvent):
     ext = EVENT_TYPE_MSGPACK_EXT[type(event)]
-    return umsgpack.packb(umsgpack.Ext(ext, event.pack()))
+    return umsgpack.packb(umsgpack.Ext(ext, umsgpack.packb(event.pack())))
 
 
 def unpack(ext: umsgpack.Ext):

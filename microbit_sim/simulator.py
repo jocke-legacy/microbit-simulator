@@ -1,10 +1,12 @@
 import atexit
 import logging
+import queue
 import threading
 import time
 from collections import deque
 
 import zmq
+from microbit_sim import inputevent
 from microbit_sim.stub.button import Button
 from microbit_sim.stub.display import Display
 
@@ -45,13 +47,41 @@ class Simulator:
                                           stderr=out_stream)
 
         self.renderer = None
-        self.gui_thread = None
         self._time_last_display_update = 0
+
+        self.input_thread = None
 
     def start(self):
         _log.info('Starting %r', self)
 
+        self.input_thread = threading.Thread(target=self.wait_for_input,
+                                             name='input_thread',
+                                             daemon=True)
+        self.input_thread.start()
+
         atexit.register(self.stop)
+
+    def wait_for_input(self):
+        while True:
+            input_event = self.bus.recv_input_event()
+            _log.info('Got input event: %r', input_event)
+
+            if isinstance(input_event, inputevent.ButtonEvent):
+                button = None
+                if input_event.name == 'button_a':
+                    button = self.button_a
+                elif input_event.name == 'button_b':
+                    button = self.button_b
+
+                if button is None:
+                    _log.error('No button for name %r', input_event.name)
+                else:
+                    if input_event.type == 'press':
+                        button._press()
+                    else:
+                        _log.error('Unknown event type: %r', input_event.type)
+            else:
+                _log.error('Unknown event %r', input_event)
 
     def on_display_update(self, buffer):
         # # Rate limiting
