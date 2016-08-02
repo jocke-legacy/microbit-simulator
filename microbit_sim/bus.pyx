@@ -4,6 +4,7 @@ from abc import ABCMeta, abstractproperty, abstractmethod
 
 import umsgpack
 import numpy
+import zmq
 from microbit_sim import inputevent
 
 from . import conf, zmq_ext
@@ -78,13 +79,21 @@ class BaseBus(AbstractBus):
 
         display_send_socket = self.context.socket(zmq_ext.PUSH)
         display_send_socket.hwm = 1
+        display_recv_socket = self.context.socket(zmq_ext.PULL)
+        display_recv_socket.hwm = 1
 
         self.sockets = {
             'display': {
-                'recv': Connect(self.context.socket(zmq_ext.PULL),
+                'recv': Connect(display_recv_socket,
                                 conf.DISPLAY_SOCKET),
                 'send': Bind(display_send_socket,
                              conf.DISPLAY_SOCKET),
+            },
+            'display-pixel': {
+                'recv': Connect(self.context.socket(zmq.PULL),
+                                conf.DISPLAY_PIXEL_SOCKET),
+                'send': Bind(self.context.socket(zmq.PUSH),
+                             conf.DISPLAY_PIXEL_SOCKET)
             },
             'control': {
                 'recv': Bind(control_socket, conf.CONTROL_SOCKET),
@@ -137,8 +146,8 @@ class Bus(BaseBus):
 
     @incr_stats_sent
     def send_display_pixel(self, x, y, value):
-        return self._send_socket('display').send_multipart(
-            [b'pixel', x, y, value])
+        return self._send_socket('display-pixel').send(
+            bytearray([x, y, value]))
 
     @incr_stats_sent
     def send_control(self, control):
@@ -210,5 +219,3 @@ def unpack_array(metadata_bytes, buffer):
     buf = memoryview(buffer)
     numpy_array = numpy.frombuffer(buf, dtype=metadata['dtype'])
     return numpy_array.reshape(metadata['shape'])
-
-

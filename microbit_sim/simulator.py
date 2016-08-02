@@ -13,7 +13,7 @@ from microbit_sim.stub.display import Display
 from . import conf
 from .bus import Bus
 from .io import patch_standard_io, ZMQWritableStream
-from .logging import configure_logging
+from .logconf import configure_logging
 
 _log = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ class Simulator:
                 _log.error('Unknown event %r', input_event)
 
     def on_display_pixel_update(self, x, y, value):
-        pass#self.bus.send_display_pixel(x, y, value)
+        self.bus.send_display_pixel(x, y, value)
 
     def on_display_update(self, buffer):
         # # Rate limiting
@@ -98,7 +98,8 @@ class Simulator:
         #
         # self._time_last_display_update = t_now
 
-        self.bus.send_display(buffer)
+        pass
+        #self.bus.send_display(buffer)
         #self.queues.display.put(buffer)
         #self.renderer.render_display(buffer)
 

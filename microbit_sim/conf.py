@@ -48,5 +48,6 @@ LOGGING_PUB_SOCKET = 'ipc:///tmp/microbit-logging.sock'
 DISPLAY_QUEUE_SIZE = 1
 
 DISPLAY_SOCKET = 'ipc:///tmp/microbit-display.sock'
+DISPLAY_PIXEL_SOCKET = 'ipc:///tmp/microbit-display-pixel.sock'
 CONTROL_SOCKET = 'ipc:///tmp/microbit-control.sock'
 INPUT_EVENTS_SOCKET = 'ipc:///tmp/microbit-input.sock'

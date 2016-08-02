@@ -241,12 +241,13 @@ class ratelimit:
         return t_now
 
 
-def tail_recursive(coro):
+def tail_recursive(func):
     loop = asyncio.get_event_loop()
 
-    @functools.wraps(coro)
     async def wrapper(*args, **kwargs):
-        result = await coro(*args, **kwargs)
-        loop.create_task(coro)
+        coro = func(*args, **kwargs)
+        result = await coro
+        loop.create_task(func(*args, **kwargs))
+        return result
 
     return wrapper

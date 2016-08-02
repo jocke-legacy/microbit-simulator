@@ -14,7 +14,7 @@ import curses
 from microbit_sim.inputevent import ButtonEvent
 from microbit_sim.bus import AsyncBus
 from microbit_sim.ui.common import end_curses_on_exception
-#from microbit_sim.ui.speedup.zmq_interface import ZMQUIInterface
+from microbit_sim.ui.display_interface import ZMQDisplayInterface
 from microbit_sim.ui.speedup import common as _common
 
 _log = logging.getLogger(__name__)
@@ -77,9 +77,11 @@ class AsyncIOCursesUI:
 
         self.loop.call_soon(self.refresh_stats)
 
-        self.create_task(self.listen_for_input())
+        ZMQDisplayInterface(self.render_display_pixel)
+
+        # self.create_task(self.listen_for_input())
         # self.add_task(self.receive_control_messages())
-        self.create_task(self.receive_display_updates())
+        # self.create_task(self.receive_display_updates())
         self.create_task(self.refresh_ui())
         self.loop.call_soon(self.print_tasks)
         self.loop.run_forever()
@@ -132,31 +134,31 @@ class AsyncIOCursesUI:
 
         self.create_task(self.receive_control_messages())
 
-    @common.tail_recursive
+    #@common.tail_recursive
     async def receive_display_updates(self):
-        # async for _ in common.ratelimit(0):
-            # _log.info('Display update')
-            # message_type, display_data = await self.bus.recv_display()
-            #
-            # if message_type == b'display':
-            #     self.render_display(display_data)
-            # elif message_type == b'pixel':
-            #     self.render_display_pixel(*display_data)
-        buffer = await self.bus.recv_display()
-        self.update_timing('recv_display')
-        self.render_stats()
-        self.render_display(buffer)
+        async for _ in common.ratelimit(1 / 10000):
+            buffer = await self.bus.recv_display()
+            self.render_display(buffer)
+        # try:
+        #     fut = asyncio.ensure_future(self.bus.recv_display())
+        #     buffer = await asyncio.wait_for(fut, 0)
+        #     self.update_timing('recv_display')
+        # except:
+        #     self.update_timing('recv_timeout')
+        # else:
+        #     self.render_display(fut.result())
+        # self.create_task(self.receive_display_updates())
 
         #self.add_task(self.receive_display_updates())
-    #
-    # @end_curses_on_exception
-    # def render_display_pixel(self, x, y, value):
-    #     y, x = _common.led_y(y), _common.led_x(x)
-    #     self.win.leds.addch(self.layout.leds.y + y,
-    #                         self.layout.leds.x + x,
-    #                         common.U_LOWER_HALF_BLOCK,
-    #                         common.pair_for_value(value))
-    #     self.win.leds.refresh()
+
+    @end_curses_on_exception
+    def render_display_pixel(self, x, y, value):
+        self.update_timing('render')
+        y, x = self.led_y(y), self.led_x(x)
+        self.win.leds.addch(y,
+                            x,
+                            common.U_LOWER_HALF_BLOCK,
+                            common.pair_for_value(value))
 
     def led_y(self, y):
         return y + 1
@@ -166,7 +168,7 @@ class AsyncIOCursesUI:
 
     @end_curses_on_exception
     def render_display(self, buffer):
-        self.update_timing('render')
+        #self.update_timing('render')
 
         if False:
             _common.render_leds(self.win.leds,
